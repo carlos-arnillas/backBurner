@@ -7,13 +7,19 @@
 # backBurner({x <- function(r) {1+3};x})
 # backBurner({p0<- proc.time(); Sys.sleep(30);p1 <- proc.time(); cat(p1-p0)})
 
-backBurner <- function(expr, Substitute=TRUE) {# get the environment and the list of variables in it
+backBurner <- function(expr=NULL, Substitute=TRUE, name=NULL) {
+  # get the environment and the list of variables in it
   pos <- .GlobalEnv
   lvars <- ls(pos=pos)
   # load the list of loaded packages
   lloaded <- (.packages())
   textLibs <- paste0("library(",lloaded,")")
   # deparse the instructions and make them a character vector without beginning/end
+  if (is.null(expr)) {
+    conpipe <- pipe("pbpaste")
+    texpr <- suppressMessages(scan(conpipe,character(),sep="\n"))
+    close(conpipe)
+  }
   texpr <- if (Substitute[1]) deparse(substitute(expr)) else deparse=deparse(expr)
   texpr <- texpr[c(-1,-length(texpr))]
   texpr <- paste0(texpr,collapse="\n")
@@ -25,13 +31,14 @@ backBurner <- function(expr, Substitute=TRUE) {# get the environment and the lis
   if (any(lvarsExp == "conLog__")) stop("Sorry... the only variable name you cannot use is conLog__.")
   
   # create the file names
-  fnBase <- tempfile(pattern="back.running.", tmpdir=getwd())
+  fnBase <- tempfile(pattern=paste0("back.running.",sprintf("%s.", name)), tmpdir=getwd())
   fnData <- paste0(fnBase,".RData")
   fnSc <- paste0(fnBase,".R")
   fnLog <- paste0(fnBase,".log.txt")
   
   # now put all together in a text file
-  scLines <- c("# Creating a message to be shown in the screen at the end",
+  scLines <- c(sprintf("Back burner %s\n\n", name),
+               "# Creating a message to be shown in the screen at the end",
                sprintf("on.exit(system(\"osascript -e 'tell app \\\"Finder\\\" to display dialog \\\"Back Burner Done!\n%s\\\"'\"))",fnBase),
                 "# setting the log file",
                 sprintf('conLog__ <- file("%s", open="wt")',fnLog),
@@ -48,6 +55,7 @@ backBurner <- function(expr, Substitute=TRUE) {# get the environment and the lis
                                                                              c("conLog__",lvarsExp),'"',
                                                                              collapse=","), fnData),
                 "# and a closing message",
+                sprintf("cat('\n========================================\nBack burner %s\n", name),
                 sprintf("cat('\n========================================\nScript completed!\\n Data available in %s\\nLog report in %s\n')",fnData,fnLog),
                 "# repeated after sink has stopped, so it bounce back to the main R code.",
                 "sink(file=NULL)",
