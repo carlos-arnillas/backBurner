@@ -7,7 +7,11 @@
 # backBurner({x <- function(r) {1+3};x})
 # backBurner({p0<- proc.time(); Sys.sleep(30);p1 <- proc.time(); cat(p1-p0)})
 
-backBurner <- function(expr=NULL, Substitute=TRUE, name=NULL) {
+externalBurner <- function(expr=NULL, Substitute=TRUE, name=NULL) {
+  backBurner(expr=NULL, Substitute=TRUE, name=NULL, external=TRUE)
+}
+
+backBurner <- function(expr=NULL, Substitute=TRUE, name=NULL, external=FALSE) {
   # get the environment and the list of variables in it
   pos <- .GlobalEnv
   lvars <- ls(pos=pos)
@@ -15,15 +19,16 @@ backBurner <- function(expr=NULL, Substitute=TRUE, name=NULL) {
   lloaded <- (.packages())
   textLibs <- paste0("library(",lloaded,")")
   # deparse the instructions and make them a character vector without beginning/end
-  if (is.null(expr)) {
+  texpr <- if (Substitute[1]) deparse(substitute(expr)) else deparse=deparse(expr)
+  # if nothing in expr, look in the clipboard
+  if (is.null(texpr) || texpr == "NULL") {
     conpipe <- pipe("pbpaste")
     texpr <- suppressMessages(scan(conpipe,character(),sep="\n"))
     close(conpipe)
   }
-  texpr <- if (Substitute[1]) deparse(substitute(expr)) else deparse=deparse(expr)
+  if (is.null(texpr)) stop("'expr' argument and clipboard are empty.")
   texpr <- texpr[c(-1,-length(texpr))]
   texpr <- paste0(texpr,collapse="\n")
-  
   
   # find the variables that have to be saved
   lvarsExp <- unlist(lapply(lvars, function(x) if (any(grepl(sprintf("\\<%s\\>",gsub("\\.","\\.",x)),
@@ -65,8 +70,13 @@ backBurner <- function(expr=NULL, Substitute=TRUE, name=NULL) {
   # Create a temporary script and the input data
   save(list=lvarsExp,file=fnData)
   writeLines(scLines, con=fnSc)
-  # Calling the external function
-  system(sprintf("cd %s;Rscript %s",getwd(),fnSc), wait=FALSE)
-  cat(sprintf("Back burning... wait for a bit. Results will be at %s.RData", fnBase))
-  invisible(fnData)
+  # Calling the external function if needed
+  if (external) {
+    cat(sprintf("Files ready to be executed at %s.*", fnBase))
+    invisible(fnBase)
+  } else {
+    system(sprintf("cd %s;Rscript %s",getwd(),fnSc), wait=FALSE)
+    cat(sprintf("Back burning... wait for a bit. Results will be at %s.RData", fnBase))
+    invisible(fnData)
+  }
 }
